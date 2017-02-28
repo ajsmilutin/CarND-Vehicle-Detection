@@ -1,19 +1,9 @@
 # Vehicle Detection
-[![Udacity - Self-Driving Car NanoDegree](https://s3.amazonaws.com/udacity-sdc/github/shield-carnd.svg)](http://www.udacity.com/drive)
-
-
-In this project, your goal is to write a software pipeline to detect vehicles in a video (start with the test_video.mp4 and later implement on full project_video.mp4), but the main output or product we want you to create is a detailed writeup of the project.  Check out the [writeup template](https://github.com/udacity/CarND-Vehicle-Detection/blob/master/writeup_template.md) for this project and use it as a starting point for creating your own writeup.  
-
-Creating a great writeup:
----
-A great writeup should include the rubric points as well as your description of how you addressed each point.  You should include a detailed description of the code used in each step (with line-number references and code snippets where necessary), and links to other supporting documents or external references.  You should include images in your writeup to demonstrate how your code works with examples.  
-
-All that said, please be concise!  We're not looking for you to write a book here, just a brief description of how you passed each rubric point, and references to the relevant code :). 
-
-You can submit your writeup in markdown or use another method and submit a pdf instead.
-
 The Project
 ---
+
+
+**Vehicle Detection Project**
 
 The goals / steps of this project are the following:
 
@@ -23,11 +13,141 @@ The goals / steps of this project are the following:
 * Implement a sliding-window technique and use your trained classifier to search for vehicles in images.
 * Run your pipeline on a video stream (start with the test_video.mp4 and later implement on full project_video.mp4) and create a heat map of recurring detections frame by frame to reject outliers and follow detected vehicles.
 * Estimate a bounding box for vehicles detected.
+* Estimate the distance to detected vehicles
+* Esitmate relative speed of the detected vehicles
 
-Here are links to the labeled data for [vehicle](https://s3.amazonaws.com/udacity-sdc/Vehicle_Tracking/vehicles.zip) and [non-vehicle](https://s3.amazonaws.com/udacity-sdc/Vehicle_Tracking/non-vehicles.zip) examples to train your classifier.  These example images come from a combination of the [GTI vehicle image database](http://www.gti.ssr.upm.es/data/Vehicle_database.html), the [KITTI vision benchmark suite](http://www.cvlibs.net/datasets/kitti/), and examples extracted from the project video itself.   You are welcome and encouraged to take advantage of the recently released [Udacity labeled dataset](https://github.com/udacity/self-driving-car/tree/master/annotations) to augment your training data.  
+**Running the code**
+First you need to unzip the `vehicles.zip` and `non-vehicles.zip` from the folder `train_images` in the same folder. Next, to train the classifier run python script `train_net.py` which will create the `classifier.p` a pickle dump that contains trained classifier. After that you are good to run the `car_finder.py` which looks for cars in a video and estimates distances to them and also looks for lanes. 
 
-Some example images for testing your pipeline on single frames are located in the `test_images` folder.  To help the reviewer examine your work, please save examples of the output from each stage of your pipeline in the folder called `ouput_images`, and include them in your writeup for the project by describing what each image shows.    The video called `project_video.mp4` is the video your pipeline should work well on.  
+[//]: # (Image References)
+[image1]: ./examples/kitti.png
+[image2]: ./examples/gti_far.png
+[image3]: ./examples/gti_middle.png
+[image4]: ./examples/gti_left.png
+[image5]: ./examples/gti_right.png
+[image6]: ./examples/extra_non0.png
+[image7]: ./examples/extra_non1.png
+[image8]: ./examples/extra_non2.png
+[image9]: ./examples/gti_non0.png
+[image10]: ./examples/gti_non1.png
+[image11]: ./examples/resize.jpg
+[image12]: ./examples/normal.jpg
+[image13]: ./examples/luv.jpg
+[image14]: ./examples/20x20.jpg
+[image15]: ./examples/histograms.png
+[image16]: ./examples/hog.png
+[image17]: ./test_images/test4.jpg
+[image18]: ./examples/img_roi64.jpg
+[image19]: ./examples/img_roi160.jpg
+[image20]: ./examples/detected.jpg
+[image21]: ./examples/heatmap.jpg
+[image22]: ./examples/thresholded.jpg
+[image23]: ./examples/label_img.jpg
+[image24]: ./examples/original.jpg
+[image25]: ./examples/near.jpg
+[image26]: ./examples/cropped.jpg
+[image27]: ./output_images/test4.jpg
+---
 
-**As an optional challenge** Once you have a working pipeline for vehicle detection, add in your lane-finding algorithm from the last project to do simultaneous lane-finding and vehicle detection!
+## The Car Classifier
 
-**If you're feeling ambitious** (also totally optional though), don't stop there!  We encourage you to go out and take video of your own, and show us how you would implement this project on a new video!
+First thing that we need to do is to create a classifier which classifies car agains non-cars. To do so the dataset is neede, and I have used the dataset provided by Udacity. ( Download: [vehicles](https://s3.amazonaws.com/udacity-sdc/Vehicle_Tracking/vehicles.zip), [non-vehicles](https://s3.amazonaws.com/udacity-sdc/Vehicle_Tracking/non-vehicles.zip)). The dataset is a combination of KITTI vision benchmark suite and GTI vehicle image database. GTI car images are grouped into far, left, right, middle close. The examples of cars and non cars follow:
+
+| KITTI     | GTI Far     | GTI  Near|    GTI Left | GTI Right  |
+|-----------|-------------|------------|-------------|------------|
+|![][image1]| ![][image2] | ![][image3]| ![][image4] |![][image5] |
+|  Non car  |  Non car    | Non Car    | GTI Non 1   | GTI Non 2  |
+|![][image6]| ![][image7] | ![][image8]| ![][image9] |![][image10]|
+
+To build a classifier, first the features have to be identified. The features that are going to be used is a mixture of histograms, full images, and HOG-s. The calculation of the features is implemented in functions `CarFinger.get_features()` and `CarFinder.car_find_roi()`. The first one is used for trainig a classifier while the later one is used to batch classify the images. 
+
+### Extracting features
+#### Color space
+Color space is related to the representation of images in the sense of color encodings. There are encodings that are more suitable for one purpose but bad for the others. For example, RBG is good from the hardware standpoint of view, since it is how the pixels are captured and displayed ([Bayer filter](https://en.wikipedia.org/wiki/Bayer_filter) is one good example) but it does not capture the way humans perceive the colors, which is important for classification tasks. For task of classifying cars, I am sure that there is no prescribed color space which works the best. So it has to be chosen by trial and error. What I have done, is that I have built the classifier, based on HOG, color histograms and full image and then changed the color space untill I got the best classification result on a test set. Maybe I am decribing problem from top to bottom, but the color space is quite important for explaining and visualizing features. After some trial I found that [LUV](https://en.wikipedia.org/wiki/CIELUV) color space works the best. It has the luminesence component L, as well as two (*u* and *v*) chromaticity components. That color space consistantly gave better classification results. The conversion takes place in lines 155 and 182 of file `car_finder.py`.
+
+#### Subsampled and normalized image as a feature
+First and most simple feature is the subsampled image. Once again, by trying and checking classification result the size of subsampled image is chosen to be 20x20. Also, the image is gamma-nomralized. For that I have heard in this [YouTube](https://www.youtube.com/watch?v=7S5qXET179I) video explaining HOG. It was stated that taking square root of the image normalizes it and gets uniform brightness thus reducing the effect of shadows. I gave it a try and it creates a minute improvement on the classification. Since it is quite a simple operation it stayed in my code since it provides additional robustness. The subsampling and normalization takes place in lines 181-183 and 154-156 of file `car_finder.py`. After normalization and subsampling the image is reshaped into a single vector using `numpy.ravel()` The original image, normalized converted to LUV and subsampled are:
+
+| Original  | Normalized    | LUV         |Subsampled   |
+|-----------|---------------|-------------|-------------|
+|![][image11]| ![][image12] | ![][image13]|![][image14] |
+
+#### Histogram of colors
+Second group of features are color histograms. Initially I have tried to use only histogram of luminesence channel *L*. The cars can have different colors, so ommiting the chromaticity chromacity channels looked like a natural choice to me. After some testing I found out that including histogram of all three color channels improved the test accuracy for a couple of percent which can make a lot of difference. The histogram calculation is performed in lines 157-159 and 207-210 of `car_finder.py`. Number of bins in histogram is selected based on the testing accuracy and 128 bins produces the best result. Here are samples of histograms for image previously shown. 
+
+![][image15]
+
+#### HOG
+The last, but probbably the most important, feature is histogram of oriented gradients. The image on which the HOG is calculated is of size 64x64. The number of pixels per cell is 8, while the number of cells per block is 1. The number of orientations is 12. The HOG is calculated on all three channels of normalized image. I have tested these parameters a lot and finally found that this was the optimal choice. What I have considered in selection was the number of features generated this way and the obtained accuracy on test set. When block this parameters were used a total of 768 features per channel are created. If the number of cells per block is increased to 2, the number of features blows up to 2352 per channel. Increase in classification accuracy when using 2 cells per block wasn't substantial so I have chosen to use 1 cell per block. Also I have tried higher number of pixels per cell, in what case lot of information is lost and accurady drops, while lowering the number of pixels per cell increases the number of features. Calculation of HOGs is implemented in lines 160-168 and 184-192 of `car_finder.py` Images representing visualizing HOG for each channel are:
+![][image16]
+
+#### Training the classifier
+
+The classifier used is *linear support vector classifier* implemented as part of `scikit-learn`. The dataset is obtained by looping through images of vehicles and non-vehicles and calculating  features for those images. Next thing that was performed is to scale the features, which is quite important for any machinel learning algorithm. After that, the dataset is split into a training and test set, where test set is 10% of all the data. The classifier is trained with *C=1e-4*, where this feature was selected based on the accuracies of train and test set. If the difference between the two accuracies is high the training is overfitting the data so  the *C* was lowered. When the test accuracy is low but same as training accuracy, the underfitting hass ocured so the value of the *C* was increased. The finall accuracy obtained on the test set was **99.55%**. After the training the classifier and scaler were pickeled and saved, so that they can be reused when images comming from the camera were processed. The implementation of whole training procedure is in file `train_svm.py`. 
+
+---
+
+## Finding cars on images/videos
+
+The pipeline for finding cars in images and videos is very similar. Infact the finding cars in videos follows the same pipeline for finding cars in still images with some additional features. For that reason the pipeline for a single image will be described first.
+
+### Sliding the window
+
+First thing to do is to slide the window accros the screen and try to identify the areas which produce a positive hit at defined classifier. The window that is going to get slid is allways the size 64x64 with overlap of 75%. In some cases the car can be bigger than 64x64 pixels so to encompass those cases, the whole image is downscaled. As a result the car is searched on original, and 5 downscaled images, selected so that the cars on the original image would be of sizes 80x80, 96x96, 112x112, 128x128 and 160x160. HOG is calculated only once per downscaled image and the subregion of HOG is used when each of windows gets tested if there is a car. After the window is slid the whole batch of features calculated for each window gets classified. Windows classified as non-cars get discarded. The whole procedure is implemented in `CarFinder.car_find_roi()`. Here is the example of original image, 2 regions that get searched for cars and regions with detected cars:
+
+| Original   | Search 64x64   |
+|------------|----------------|
+|![][image17]| ![][image18]   |
+| Detections |  Search 160x160| 
+|![][image20]| ![][image19]   |
+
+### Calculating the heatmap and identifying cars
+
+Since there are multiple detections of the same car the windows had to be grouped somehow. For that case, the heatmap is used. Each pixel in the heatmap holds the number of windows with identified cars which contain that pixel. The higher the value of the pixel in the heatmap the more likely it is the part of the car. The heatmap is thresholded with threshold of 1, which removes any possible false car detections. After that the connected componnents get labeled and the bounding box is calculated. This is performed in lines 238 - 254 of `car_finder.py`. The resulting images are:
+
+| Heatmap   | Thresholded Heatmap | Labels      |
+|-----------|---------------------|-------------|
+|![][image21]| ![][image22]       | ![][image23]|
+
+
+### Removal of the road from the bottom side of the bounding box. 
+
+The reason for this is that we want to estimate how far ahead of us is identified car. In our previous [project](https://github.com/ajsmilutin/CarND-Advanced-Lane-Lines/blob/master/README.md) the perspective transform was found which maps the road surface to the image and enables us to measure distances. Perspective transform assumes that object transformed is planar, so to measure distance accurately we need a point which is on the road surface. To measure distance the mid point of the lower edge of bounding box is used. The road surface is removed so that the measurement is performed to the back wheels of the identified car. To do so, the median color of the last 8 lines of the bounding box is found. The first line from the bottom in which more than  20% of the points are far from the median color is regarded as the new bottom edge of the bounding box. Points 'far' in color are represented in purple color in figure below. This procedure is implemented in lines 257-264 of `car_finder.py`
+
+| Original   | Points near in color | Cropped     |
+|------------|----------------------|-------------|
+|![][image24]| ![][image25]         | ![][image26]|
+
+
+### Additional features
+Before the rectangles around the detected cars are drawn, the lane line is identified. For that the results from   was used. Also we'll try to asses the distance to the car. Once we get the bounding box and midpoint of its bottom edge, using perspective transform, we can calculate its position on the warped image from the [Advanced lane finding project](https://github.com/ajsmilutin/CarND-Advanced-Lane-Lines/blob/master/README.md). On that image there is direct corelation between the pixel position and distance in meters, so the distance between the calculated position of the mid point and the bottom of the image represents the distance between our car and the car we have detected. By looking how that distance changes from frame to frame, we can calculate car's relative speed, by multiplying difference between two frames by frames per second an 3.6 to convert it to kilometers per hour, instead of meters per second. 
+Final step is just to draw everything on a single image. Here is how he final result looks like: 
+
+| Final result   | 
+|----------------|
+|![][image27]    |
+
+
+### Finding the car in videos
+For the videos, the pipeline follows the basic pipeline applied to single images. Additionally, because of the temporal dimension, some additional filtering is applied. Here is what is done:
+ 1. The bounding boxes of all allready detected cars are used when the heatmap is calculated. Those bounding boxes are regarded as if the car has been identified on that spot. That helps avoid flicker and loosing of allready identified cars (lines 240-242)
+ 2. The bounding box is averaged over last 21 frames
+ 3. If the car is not found in 5 consecutive frames it is has dissapeared. New cars, need to be found in 5 consecutive frames to be drawn and cosidered as existig (lies 77-105). 
+
+The pipeline is run on both provided videos and works great. No false detections or not identifying existing cars occur. 
+
+ 1. [project_video](./output_videos/cars_project_video.mp4)
+ 2. [test_video](./output_videos/cars_test_video.mp4)
+
+
+---
+
+##Discussion
+
+The described pipeline works great for the provided videos, but that needs to be thoroughly tested on more videos in changing lighting conditions. What I found interesting, is that there is a part in project video where two cars are classified as one. The first car partially ocludes the second one, but it still gets classified as a car. The car didn't dissapear, it is just occluded. More robust procedure regarding this issue has to be found. 
+
+Calculating distance to the car works quite nice, even better than I have expected. Nevertheless there are still some issues when the color of the road surface is changing, the removal of the road from bottom of idetified bounding box gives the false redings. Also the speed is quite jumpy, so it too has to be filtered, but even in this form it can gives information of whether the detected car is closing or moving away from us.
+
+Last thing is that this procedure is very time cosuming. On average it takes about 1.4 seconds per iteration (Ubuntu 16.06, 2xIntel(R) Core(TM) i7-4510U CPU @ 2.00GHz, 8GB DDR3) to detect cars and lanes. It is far from being real-time, so that it can be employed in real self-driving car. By profiling, I have noted that about 50% of the time goes to calculating histograms. This code needs to be optimized and maybe rewritten in C/C++.
+
+
