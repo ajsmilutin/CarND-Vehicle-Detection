@@ -154,7 +154,7 @@ The pipeline is run on both provided videos and works great. No false detections
 
 ---
 
-##Discussion
+## Discussion
 
 The described pipeline works great for the provided videos, but that needs to be thoroughly tested on more videos in changing lighting conditions. What I found interesting, is that there is a part in project video where two cars are classified as one. The first car partially occludes the second one, but it still gets classified as a car. The car didn't disappear, it is just occluded. More robust procedure regarding this issue has to be found. 
 
