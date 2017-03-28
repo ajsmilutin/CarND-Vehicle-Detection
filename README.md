@@ -86,12 +86,12 @@ The second group of features is color histograms. Initially, I have tried to use
 The last, but probably the most important feature is a histogram of oriented gradients. The image on which the HOG is calculated is of size 64x64. The number of pixels per cell is 8, while the number of cells per block is 1. The number of orientations is 12. The HOG is calculated on all three channels of a normalized image. I have tested these parameters a lot and finally found that this was the optimal choice. What I have considered in selection was the number of features generated this way and the obtained accuracy on a test set. When this set of parameters were used,  a total of 768 features per channel are created. If the number of cells per block is increased to 2, the number of features blows up to 2352 per channel. Increase in classification accuracy when using 2 cells per block wasn't substantial so I have chosen to use 1 cell per block. Also, I have tried a higher number of pixels per cell, in what case lot of information is lost and accuracy drops while lowering the number of pixels per cell increases the number of features. Calculation of HOGs is implemented in lines 160-168 and 184-192 of `car_finder.py` Images visualizing HOG for each channel are:
 
 |HOG of a car|
---------------
+|------------|
 |![][image16]|
 
 |HOG of non-car|
-------------------
-|![][image16a]|
+|--------------|
+|![][image16a] |
 
 #### Training the classifier
 
